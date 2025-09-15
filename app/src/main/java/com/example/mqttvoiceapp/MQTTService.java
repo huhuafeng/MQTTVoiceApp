@@ -31,6 +31,7 @@ public class MQTTService extends Service {
     private TextToSpeech textToSpeech;
     private ScheduledExecutorService scheduler;
     private String brokerIp, brokerPort, protocol, topic, clientId, username, password;
+    private boolean isTtsInitialized = false;
 
     @Override
     public void onCreate() {
@@ -41,7 +42,7 @@ public class MQTTService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent != null) {
+        if (intent != null && intent.getExtras() != null) {
             brokerIp = intent.getStringExtra("BROKER_IP");
             brokerPort = intent.getStringExtra("BROKER_PORT");
             protocol = intent.getStringExtra("PROTOCOL");
@@ -49,11 +50,15 @@ public class MQTTService extends Service {
             clientId = intent.getStringExtra("CLIENT_ID");
             username = intent.getStringExtra("USERNAME");
             password = intent.getStringExtra("PASSWORD");
-            
-            startMQTTConnection();
+
+            // If TTS is already initialized, start MQTT connection.
+            // Otherwise, the connection will be started in the TTS onInit listener.
+            if (isTtsInitialized) {
+                startMQTTConnection();
+            }
         }
 
-        startForeground(NOTIFICATION_ID, createNotification());
+        startForeground(NOTIFICATION_ID, createNotification("服务已启动，正在初始化..."));
         return START_STICKY;
     }
 
@@ -71,7 +76,7 @@ public class MQTTService extends Service {
             textToSpeech.shutdown();
         }
         if (scheduler != null) {
-            scheduler.shutdown();
+            scheduler.shutdownNow();
         }
     }
 
@@ -83,36 +88,24 @@ public class MQTTService extends Service {
                 NotificationManager.IMPORTANCE_LOW
             );
             channel.setDescription("MQTT消息接收服务");
-            
-            NotificationManager manager = getSystemService(NotificationManager.class);
-            manager.createNotificationChannel(channel);
+            getSystemService(NotificationManager.class).createNotificationChannel(channel);
         }
-    }
-
-    private Notification createNotification() {
-        Intent notificationIntent = new Intent(this, MainActivity.class);
-        PendingIntent pendingIntent = PendingIntent.getActivity(
-            this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE
-        );
-
-        return new NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("MQTT语音播报服务")
-            .setContentText("正在监听MQTT消息...")
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentIntent(pendingIntent)
-            .setOngoing(true)
-            .build();
     }
 
     private void initTextToSpeech() {
         textToSpeech = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
                 int result = textToSpeech.setLanguage(Locale.CHINESE);
-                if (result == TextToSpeech.LANG_MISSING_DATA || 
+                if (result == TextToSpeech.LANG_MISSING_DATA ||
                     result == TextToSpeech.LANG_NOT_SUPPORTED) {
                     Log.e(TAG, "中文语音不支持");
                 } else {
-                    textToSpeech.setSpeechRate(1.0f);
+                    Log.d(TAG, "TTS引擎初始化成功");
+                    isTtsInitialized = true;
+                    // Check if connection details are already available and start connecting
+                    if (brokerIp != null) {
+                        startMQTTConnection();
+                    }
                 }
             } else {
                 Log.e(TAG, "TTS初始化失败");
@@ -121,9 +114,19 @@ public class MQTTService extends Service {
     }
 
     private void startMQTTConnection() {
+        // Ensure we don't run this method if TTS is not ready
+        if (!isTtsInitialized) {
+            Log.w(TAG, "TTS尚未初始化，延迟MQTT连接");
+            return;
+        }
+        
+        // Disconnect any existing client before creating a new one
+        disconnectMQTT();
+
         try {
             String brokerUrl = protocol + brokerIp + ":" + brokerPort;
             Log.d(TAG, "连接MQTT服务器: " + brokerUrl);
+            updateNotification("正在连接: " + brokerUrl);
 
             mqttClient = new MqttClient(brokerUrl, clientId, new MemoryPersistence());
             
@@ -133,7 +136,6 @@ public class MQTTService extends Service {
             options.setConnectionTimeout(30);
             options.setAutomaticReconnect(true);
 
-            // 设置认证信息（如果提供了）
             if (username != null && !username.isEmpty()) {
                 options.setUserName(username);
             }
@@ -141,11 +143,29 @@ public class MQTTService extends Service {
                 options.setPassword(password.toCharArray());
             }
 
-            mqttClient.setCallback(new MqttCallback() {
+            mqttClient.setCallback(new MqttCallbackExtended() {
+                @Override
+                public void connectComplete(boolean reconnect, String serverURI) {
+                    Log.d(TAG, (reconnect ? "重连" : "连接") + "成功，订阅主题: " + topic);
+                    updateNotification("已连接，监听主题: " + topic);
+                    try {
+                        // Subscribe to topics
+                        String[] topics = topic.split(",");
+                        int[] qos = new int[topics.length];
+                        for (int i = 0; i < topics.length; i++) {
+                            qos[i] = 1;
+                            topics[i] = topics[i].trim();
+                        }
+                        mqttClient.subscribe(topics, qos);
+                    } catch (MqttException e) {
+                        Log.e(TAG, "订阅主题失败", e);
+                    }
+                }
+
                 @Override
                 public void connectionLost(Throwable cause) {
                     Log.w(TAG, "连接断开", cause);
-                    scheduleReconnect();
+                    updateNotification("连接已断开");
                 }
 
                 @Override
@@ -158,22 +178,11 @@ public class MQTTService extends Service {
 
                 @Override
                 public void deliveryComplete(IMqttDeliveryToken token) {
-                    // 消息发送完成
+                    // Not used
                 }
             });
 
             mqttClient.connect(options);
-            
-            // 订阅主题（支持多个主题，用逗号分隔）
-            String[] topics = topic.split(",");
-            int[] qos = new int[topics.length];
-            for (int i = 0; i < topics.length; i++) {
-                qos[i] = 1;
-                topics[i] = topics[i].trim();
-            }
-            mqttClient.subscribe(topics, qos);
-            
-            Log.d(TAG, "MQTT连接成功，订阅主题: " + topic);
 
         } catch (Exception e) {
             Log.e(TAG, "MQTT连接失败", e);
@@ -182,15 +191,15 @@ public class MQTTService extends Service {
     }
 
     private void scheduleReconnect() {
-        if (scheduler == null) {
-            scheduler = Executors.newScheduledThreadPool(1);
+        if (scheduler == null || scheduler.isShutdown()) {
+            scheduler = Executors.newSingleThreadScheduledExecutor();
         }
         scheduler.schedule(this::startMQTTConnection, 10, TimeUnit.SECONDS);
     }
 
     private void speakMessage(String message) {
-        if (textToSpeech != null && !textToSpeech.isSpeaking()) {
-            textToSpeech.speak(message, TextToSpeech.QUEUE_FLUSH, null, "mqtt_message");
+        if (isTtsInitialized && textToSpeech != null) {
+            textToSpeech.speak(message, TextToSpeech.QUEUE_ADD, null, "mqtt_message");
         }
     }
 
@@ -202,12 +211,36 @@ public class MQTTService extends Service {
 
     private void disconnectMQTT() {
         try {
-            if (mqttClient != null && mqttClient.isConnected()) {
-                mqttClient.disconnect();
+            if (mqttClient != null) {
+                if (mqttClient.isConnected()) {
+                    mqttClient.disconnect();
+                }
                 mqttClient.close();
+                mqttClient = null;
             }
         } catch (MqttException e) {
             Log.e(TAG, "断开MQTT连接失败", e);
         }
+    }
+    
+    private void updateNotification(String contentText) {
+        Notification notification = createNotification(contentText);
+        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        manager.notify(NOTIFICATION_ID, notification);
+    }
+
+    private Notification createNotification(String contentText) {
+        Intent notificationIntent = new Intent(this, MainActivity.class);
+        PendingIntent pendingIntent = PendingIntent.getActivity(
+            this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE
+        );
+
+        return new NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("MQTT语音播报服务")
+            .setContentText(contentText)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentIntent(pendingIntent)
+            .setOngoing(true)
+            .build();
     }
 }
