@@ -25,11 +25,11 @@ jobs:
     - name: Create local properties
       run: echo "sdk.dir=${ANDROID_HOME}" > local.properties
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
-
-    - name: Build APK
-      run: ./gradlew assembleDebug
+    - name: Build APK with Gradle
+      run: |
+        wget https://services.gradle.org/distributions/gradle-8.4-bin.zip -P /tmp
+        unzip -d /opt /tmp/gradle-8.4-bin.zip
+        /opt/gradle-8.4/bin/gradle assembleDebug
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
