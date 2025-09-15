@@ -1,6 +1,9 @@
 package com.example.mqttvoiceapp;
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.widget.Button;
@@ -9,11 +12,16 @@ import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+
 public class MainActivity extends AppCompatActivity {
     private EditText etBrokerIp, etBrokerPort, etProtocol, etTopic, etClientId, etUsername, etPassword;
     private Button btnStart, btnStop, btnTestConnection;
-    private TextView tvStatus;
+    private TextView tvStatus, tvMessageLog; // Added tvMessageLog
     private SharedPreferences sharedPreferences;
+    private MessageReceiver messageReceiver; // Receiver for MQTT messages
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -23,6 +31,16 @@ public class MainActivity extends AppCompatActivity {
         initViews();
         loadSavedConfig();
         setClickListeners();
+        setupReceiver();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        // Unregister the receiver to prevent memory leaks
+        if (messageReceiver != null) {
+            unregisterReceiver(messageReceiver);
+        }
     }
 
     private void initViews() {
@@ -37,6 +55,7 @@ public class MainActivity extends AppCompatActivity {
         btnStop = findViewById(R.id.btn_stop);
         btnTestConnection = findViewById(R.id.btn_test_connection);
         tvStatus = findViewById(R.id.tv_status);
+        tvMessageLog = findViewById(R.id.tv_message_log); // Initialize the log view
 
         sharedPreferences = getSharedPreferences("mqtt_config", MODE_PRIVATE);
     }
@@ -67,6 +86,12 @@ public class MainActivity extends AppCompatActivity {
         btnStart.setOnClickListener(v -> startMQTTService());
         btnStop.setOnClickListener(v -> stopMQTTService());
         btnTestConnection.setOnClickListener(v -> testConnection());
+    }
+
+    private void setupReceiver() {
+        messageReceiver = new MessageReceiver();
+        IntentFilter intentFilter = new IntentFilter(MQTTService.ACTION_MQTT_MESSAGE_RECEIVED);
+        registerReceiver(messageReceiver, intentFilter, RECEIVER_NOT_EXPORTED);
     }
 
     private void startMQTTService() {
@@ -136,5 +161,31 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateStatus(String status) {
         tvStatus.setText("状态: " + status);
+    }
+
+    private void appendMessageToLog(String message) {
+        String timestamp = new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date());
+        String currentLog = tvMessageLog.getText().toString();
+        String newLog;
+
+        if (currentLog.equals("等待消息...")) {
+            newLog = timestamp + ": " + message;
+        } else {
+            newLog = currentLog + "\n" + timestamp + ": " + message;
+        }
+        tvMessageLog.setText(newLog);
+    }
+
+    // Inner class for receiving messages from MQTTService
+    private class MessageReceiver extends BroadcastReceiver {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (intent != null && MQTTService.ACTION_MQTT_MESSAGE_RECEIVED.equals(intent.getAction())) {
+                String message = intent.getStringExtra(MQTTService.EXTRA_MQTT_MESSAGE);
+                if (message != null) {
+                    appendMessageToLog(message);
+                }
+            }
+        }
     }
 }

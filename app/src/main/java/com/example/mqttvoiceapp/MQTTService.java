@@ -20,6 +20,9 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class MQTTService extends Service {
+    public static final String ACTION_MQTT_MESSAGE_RECEIVED = "com.example.mqttvoiceapp.MQTT_MESSAGE_RECEIVED";
+    public static final String EXTRA_MQTT_MESSAGE = "com.example.mqttvoiceapp.MQTT_MESSAGE";
+
     private static final String TAG = "MQTTService";
     private static final int NOTIFICATION_ID = 1;
     private static final String CHANNEL_ID = "MQTT_CHANNEL";
@@ -150,6 +153,7 @@ public class MQTTService extends Service {
                     String payload = new String(message.getPayload());
                     Log.d(TAG, "收到消息 [" + receivedTopic + "]: " + payload);
                     speakMessage(payload);
+                    broadcastMessage(payload);
                 }
 
                 @Override
@@ -188,6 +192,12 @@ public class MQTTService extends Service {
         if (textToSpeech != null && !textToSpeech.isSpeaking()) {
             textToSpeech.speak(message, TextToSpeech.QUEUE_FLUSH, null, "mqtt_message");
         }
+    }
+
+    private void broadcastMessage(String message) {
+        Intent intent = new Intent(ACTION_MQTT_MESSAGE_RECEIVED);
+        intent.putExtra(EXTRA_MQTT_MESSAGE, message);
+        sendBroadcast(intent);
     }
 
     private void disconnectMQTT() {
