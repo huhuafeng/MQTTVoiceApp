@@ -12,7 +12,7 @@
         android:allowBackup="true"
         
         android:label="MQTT语音播报"
-        android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
+        android:theme="@style/Theme.MaterialComponents.DayNight.DarkActionBar">
         
         <activity
             android:name=".MainActivity"
