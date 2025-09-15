@@ -10,7 +10,7 @@
 
     <application
         android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
+        
         android:label="MQTT语音播报"
         android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
         
