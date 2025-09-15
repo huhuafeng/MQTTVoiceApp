@@ -20,8 +20,13 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class MQTTService extends Service {
+    // Actions for broadcasts
     public static final String ACTION_MQTT_MESSAGE_RECEIVED = "com.example.mqttvoiceapp.MQTT_MESSAGE_RECEIVED";
+    public static final String ACTION_MQTT_STATUS_UPDATE = "com.example.mqttvoiceapp.MQTT_STATUS_UPDATE";
+
+    // Keys for extra data in intents
     public static final String EXTRA_MQTT_MESSAGE = "com.example.mqttvoiceapp.MQTT_MESSAGE";
+    public static final String EXTRA_MQTT_STATUS = "com.example.mqttvoiceapp.MQTT_STATUS";
 
     private static final String TAG = "MQTTService";
     private static final int NOTIFICATION_ID = 1;
@@ -51,14 +56,11 @@ public class MQTTService extends Service {
             username = intent.getStringExtra("USERNAME");
             password = intent.getStringExtra("PASSWORD");
 
-            // If TTS is already initialized, start MQTT connection.
-            // Otherwise, the connection will be started in the TTS onInit listener.
-            if (isTtsInitialized) {
-                startMQTTConnection();
-            }
+            // Always try to start the connection when the service is started with details
+            startMQTTConnection();
         }
 
-        startForeground(NOTIFICATION_ID, createNotification("服务已启动，正在初始化..."));
+        startForeground(NOTIFICATION_ID, createNotification("服务已启动"));
         return START_STICKY;
     }
 
@@ -102,10 +104,6 @@ public class MQTTService extends Service {
                 } else {
                     Log.d(TAG, "TTS引擎初始化成功");
                     isTtsInitialized = true;
-                    // Check if connection details are already available and start connecting
-                    if (brokerIp != null) {
-                        startMQTTConnection();
-                    }
                 }
             } else {
                 Log.e(TAG, "TTS初始化失败");
@@ -114,18 +112,13 @@ public class MQTTService extends Service {
     }
 
     private void startMQTTConnection() {
-        // Ensure we don't run this method if TTS is not ready
-        if (!isTtsInitialized) {
-            Log.w(TAG, "TTS尚未初始化，延迟MQTT连接");
-            return;
-        }
-        
         // Disconnect any existing client before creating a new one
         disconnectMQTT();
 
         try {
             String brokerUrl = protocol + brokerIp + ":" + brokerPort;
             Log.d(TAG, "连接MQTT服务器: " + brokerUrl);
+            broadcastStatus("正在连接: " + brokerUrl);
             updateNotification("正在连接: " + brokerUrl);
 
             mqttClient = new MqttClient(brokerUrl, clientId, new MemoryPersistence());
@@ -146,10 +139,11 @@ public class MQTTService extends Service {
             mqttClient.setCallback(new MqttCallbackExtended() {
                 @Override
                 public void connectComplete(boolean reconnect, String serverURI) {
-                    Log.d(TAG, (reconnect ? "重连" : "连接") + "成功，订阅主题: " + topic);
+                    String status = (reconnect ? "重连" : "连接") + "成功";
+                    Log.d(TAG, status + "，订阅主题: " + topic);
+                    broadcastStatus(status);
                     updateNotification("已连接，监听主题: " + topic);
                     try {
-                        // Subscribe to topics
                         String[] topics = topic.split(",");
                         int[] qos = new int[topics.length];
                         for (int i = 0; i < topics.length; i++) {
@@ -159,12 +153,14 @@ public class MQTTService extends Service {
                         mqttClient.subscribe(topics, qos);
                     } catch (MqttException e) {
                         Log.e(TAG, "订阅主题失败", e);
+                        broadcastStatus("订阅主题失败");
                     }
                 }
 
                 @Override
                 public void connectionLost(Throwable cause) {
                     Log.w(TAG, "连接断开", cause);
+                    broadcastStatus("连接已断开");
                     updateNotification("连接已断开");
                 }
 
@@ -186,6 +182,7 @@ public class MQTTService extends Service {
 
         } catch (Exception e) {
             Log.e(TAG, "MQTT连接失败", e);
+            broadcastStatus("MQTT连接失败: " + e.getMessage());
             scheduleReconnect();
         }
     }
@@ -206,6 +203,12 @@ public class MQTTService extends Service {
     private void broadcastMessage(String message) {
         Intent intent = new Intent(ACTION_MQTT_MESSAGE_RECEIVED);
         intent.putExtra(EXTRA_MQTT_MESSAGE, message);
+        sendBroadcast(intent);
+    }
+
+    private void broadcastStatus(String status) {
+        Intent intent = new Intent(ACTION_MQTT_STATUS_UPDATE);
+        intent.putExtra(EXTRA_MQTT_STATUS, status);
         sendBroadcast(intent);
     }
 

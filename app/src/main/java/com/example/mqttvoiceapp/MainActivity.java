@@ -23,7 +23,7 @@ public class MainActivity extends AppCompatActivity {
     private EditText etBrokerIp, etBrokerPort, etProtocol, etTopic, etClientId, etUsername, etPassword;
     private Button btnStart, btnStop, btnTestConnection;
     private TextView tvStatus, tvMessageLog;
-    private ScrollView svLogContainer; // Added ScrollView
+    private ScrollView svLogContainer;
     private SharedPreferences sharedPreferences;
     private MessageReceiver messageReceiver;
 
@@ -59,9 +59,9 @@ public class MainActivity extends AppCompatActivity {
         btnTestConnection = findViewById(R.id.btn_test_connection);
         tvStatus = findViewById(R.id.tv_status);
         tvMessageLog = findViewById(R.id.tv_message_log);
-        svLogContainer = findViewById(R.id.sv_log_container); // Initialize ScrollView
+        svLogContainer = findViewById(R.id.sv_log_container);
 
-        tvMessageLog.setMovementMethod(new ScrollingMovementMethod()); // Enable scrolling on TextView
+        tvMessageLog.setMovementMethod(new ScrollingMovementMethod());
 
         sharedPreferences = getSharedPreferences("mqtt_config", MODE_PRIVATE);
     }
@@ -96,7 +96,9 @@ public class MainActivity extends AppCompatActivity {
 
     private void setupReceiver() {
         messageReceiver = new MessageReceiver();
-        IntentFilter intentFilter = new IntentFilter(MQTTService.ACTION_MQTT_MESSAGE_RECEIVED);
+        IntentFilter intentFilter = new IntentFilter();
+        intentFilter.addAction(MQTTService.ACTION_MQTT_MESSAGE_RECEIVED);
+        intentFilter.addAction(MQTTService.ACTION_MQTT_STATUS_UPDATE);
         registerReceiver(messageReceiver, intentFilter, RECEIVER_NOT_EXPORTED);
     }
 
@@ -104,7 +106,8 @@ public class MainActivity extends AppCompatActivity {
         if (!validateInput()) {
             return;
         }
-
+        // Clear log on new start
+        tvMessageLog.setText("等待消息...");
         saveConfig();
 
         Intent serviceIntent = new Intent(this, MQTTService.class);
@@ -169,15 +172,17 @@ public class MainActivity extends AppCompatActivity {
         tvStatus.setText("状态: " + status);
     }
 
-    private void appendMessageToLog(String message) {
+    private void appendToLog(String text, boolean isStatus) {
         String timestamp = new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date());
         String currentLog = tvMessageLog.getText().toString();
         String newLog;
+        
+        String formattedText = isStatus ? "[状态] " + text : text;
 
         if (currentLog.equals("等待消息...")) {
-            newLog = timestamp + ": " + message;
+            newLog = timestamp + ": " + formattedText;
         } else {
-            newLog = currentLog + "\n" + timestamp + ": " + message;
+            newLog = currentLog + "\n" + timestamp + ": " + formattedText;
         }
         tvMessageLog.setText(newLog);
 
@@ -189,10 +194,20 @@ public class MainActivity extends AppCompatActivity {
     private class MessageReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (intent != null && MQTTService.ACTION_MQTT_MESSAGE_RECEIVED.equals(intent.getAction())) {
+            if (intent == null || intent.getAction() == null) {
+                return;
+            }
+            
+            String action = intent.getAction();
+            if (MQTTService.ACTION_MQTT_MESSAGE_RECEIVED.equals(action)) {
                 String message = intent.getStringExtra(MQTTService.EXTRA_MQTT_MESSAGE);
                 if (message != null) {
-                    appendMessageToLog(message);
+                    appendToLog(message, false);
+                }
+            } else if (MQTTService.ACTION_MQTT_STATUS_UPDATE.equals(action)) {
+                String status = intent.getStringExtra(MQTTService.EXTRA_MQTT_STATUS);
+                if (status != null) {
+                    appendToLog(status, true);
                 }
             }
         }
