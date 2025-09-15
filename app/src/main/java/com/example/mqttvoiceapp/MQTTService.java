@@ -14,6 +14,10 @@ import android.util.Log;
 import androidx.core.app.NotificationCompat;
 import org.eclipse.paho.client.mqttv3.*;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -170,10 +174,36 @@ public class MQTTService extends Service {
 
                 @Override
                 public void messageArrived(String receivedTopic, MqttMessage message) {
-                    String payload = new String(message.getPayload());
+                    // Step 1: Decode payload using UTF-8 to prevent garbled text
+                    String payload = new String(message.getPayload(), StandardCharsets.UTF_8);
                     Log.d(TAG, "收到消息 [" + receivedTopic + "]: " + payload);
-                    speakMessage(payload);
-                    broadcastMessage(payload);
+
+                    // Step 2: Try to parse as JSON
+                    try {
+                        JSONObject json = new JSONObject(payload);
+                        // Check if it's the specific dynamic TTS format and has a "txt" field
+                        if (json.has("type") && "tts_dynamic".equals(json.getString("type")) && json.has("txt")) {
+                            String textToSpeak = json.getString("txt");
+                            // Only speak and log if the text is not empty
+                            if (textToSpeak != null && !textToSpeak.trim().isEmpty()) {
+                                Log.d(TAG, "解析到JSON指令，播报内容: " + textToSpeak);
+                                speakMessage(textToSpeak);
+                                broadcastMessage("JSON指令: " + textToSpeak);
+                            } else {
+                                Log.d(TAG, "收到空的JSON指令，已忽略");
+                                broadcastStatus("收到空的JSON指令，已忽略");
+                            }
+                        } else {
+                            // It's a valid JSON object, but not the format we are looking for. Treat as plain text.
+                            speakMessage(payload);
+                            broadcastMessage(payload);
+                        }
+                    } catch (JSONException e) {
+                        // It's not a valid JSON string, treat as plain text.
+                        Log.d(TAG, "消息不是JSON格式，按纯文本处理");
+                        speakMessage(payload);
+                        broadcastMessage(payload);
+                    }
                 }
 
                 @Override
