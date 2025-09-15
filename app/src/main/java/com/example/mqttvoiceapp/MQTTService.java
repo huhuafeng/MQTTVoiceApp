@@ -97,16 +97,20 @@ public class MQTTService extends Service {
     private void initTextToSpeech() {
         textToSpeech = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
+                broadcastStatus("TTS引擎初始化成功");
                 int result = textToSpeech.setLanguage(Locale.CHINESE);
                 if (result == TextToSpeech.LANG_MISSING_DATA ||
                     result == TextToSpeech.LANG_NOT_SUPPORTED) {
                     Log.e(TAG, "中文语音不支持");
+                    broadcastStatus("TTS中文语言不支持或数据丢失");
                 } else {
-                    Log.d(TAG, "TTS引擎初始化成功");
+                    Log.d(TAG, "TTS引擎初始化成功，语言已设置为中文");
+                    broadcastStatus("TTS中文语言设置成功");
                     isTtsInitialized = true;
                 }
             } else {
                 Log.e(TAG, "TTS初始化失败");
+                broadcastStatus("TTS引擎初始化失败，状态码: " + status);
             }
         });
     }
@@ -203,12 +207,14 @@ public class MQTTService extends Service {
     private void broadcastMessage(String message) {
         Intent intent = new Intent(ACTION_MQTT_MESSAGE_RECEIVED);
         intent.putExtra(EXTRA_MQTT_MESSAGE, message);
+        intent.setPackage(getPackageName()); // Make broadcast explicit
         sendBroadcast(intent);
     }
 
     private void broadcastStatus(String status) {
         Intent intent = new Intent(ACTION_MQTT_STATUS_UPDATE);
         intent.putExtra(EXTRA_MQTT_STATUS, status);
+        intent.setPackage(getPackageName()); // Make broadcast explicit
         sendBroadcast(intent);
     }
 
