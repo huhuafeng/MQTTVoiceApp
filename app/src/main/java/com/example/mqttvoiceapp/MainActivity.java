@@ -6,8 +6,11 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.text.method.ScrollingMovementMethod;
+import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
@@ -19,9 +22,10 @@ import java.util.Locale;
 public class MainActivity extends AppCompatActivity {
     private EditText etBrokerIp, etBrokerPort, etProtocol, etTopic, etClientId, etUsername, etPassword;
     private Button btnStart, btnStop, btnTestConnection;
-    private TextView tvStatus, tvMessageLog; // Added tvMessageLog
+    private TextView tvStatus, tvMessageLog;
+    private ScrollView svLogContainer; // Added ScrollView
     private SharedPreferences sharedPreferences;
-    private MessageReceiver messageReceiver; // Receiver for MQTT messages
+    private MessageReceiver messageReceiver;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -37,7 +41,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // Unregister the receiver to prevent memory leaks
         if (messageReceiver != null) {
             unregisterReceiver(messageReceiver);
         }
@@ -55,7 +58,10 @@ public class MainActivity extends AppCompatActivity {
         btnStop = findViewById(R.id.btn_stop);
         btnTestConnection = findViewById(R.id.btn_test_connection);
         tvStatus = findViewById(R.id.tv_status);
-        tvMessageLog = findViewById(R.id.tv_message_log); // Initialize the log view
+        tvMessageLog = findViewById(R.id.tv_message_log);
+        svLogContainer = findViewById(R.id.sv_log_container); // Initialize ScrollView
+
+        tvMessageLog.setMovementMethod(new ScrollingMovementMethod()); // Enable scrolling on TextView
 
         sharedPreferences = getSharedPreferences("mqtt_config", MODE_PRIVATE);
     }
@@ -174,6 +180,9 @@ public class MainActivity extends AppCompatActivity {
             newLog = currentLog + "\n" + timestamp + ": " + message;
         }
         tvMessageLog.setText(newLog);
+
+        // Auto-scroll to the bottom
+        svLogContainer.post(() -> svLogContainer.fullScroll(View.FOCUS_DOWN));
     }
 
     // Inner class for receiving messages from MQTTService

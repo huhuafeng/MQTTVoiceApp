@@ -236,6 +236,7 @@
                     android:layout_marginBottom="12dp" />
 
                 <ScrollView
+                    android:id="@+id/sv_log_container"
                     android:layout_width="match_parent"
                     android:layout_height="150dp"
                     android:background="#f0f0f0"
