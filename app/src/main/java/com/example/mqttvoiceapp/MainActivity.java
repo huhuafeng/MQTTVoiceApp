@@ -10,6 +10,7 @@ import android.text.method.ScrollingMovementMethod;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -25,6 +26,7 @@ public class MainActivity extends AppCompatActivity {
     private Button btnStart, btnStop, btnTestConnection;
     private TextView tvStatus, tvMessageLog;
     private ScrollView svLogContainer;
+    private CheckBox cbKeepScreenOn;
     private SharedPreferences sharedPreferences;
     private MessageReceiver messageReceiver;
 
@@ -32,7 +34,6 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         initViews();
         loadSavedConfig();
@@ -62,6 +63,7 @@ public class MainActivity extends AppCompatActivity {
         tvStatus = findViewById(R.id.tv_status);
         tvMessageLog = findViewById(R.id.tv_message_log);
         svLogContainer = findViewById(R.id.sv_log_container);
+        cbKeepScreenOn = findViewById(R.id.cb_keep_screen_on);
 
         tvMessageLog.setMovementMethod(new ScrollingMovementMethod());
 
@@ -76,6 +78,11 @@ public class MainActivity extends AppCompatActivity {
         etClientId.setText(sharedPreferences.getString("client_id", "android_client_" + System.currentTimeMillis()));
         etUsername.setText(sharedPreferences.getString("username", ""));
         etPassword.setText(sharedPreferences.getString("password", ""));
+        
+        // Load and apply keep screen on setting
+        boolean keepScreenOn = sharedPreferences.getBoolean("keep_screen_on", false);
+        cbKeepScreenOn.setChecked(keepScreenOn);
+        updateScreenOnFlag(keepScreenOn);
     }
 
     private void saveConfig() {
@@ -87,6 +94,7 @@ public class MainActivity extends AppCompatActivity {
         editor.putString("client_id", etClientId.getText().toString().trim());
         editor.putString("username", etUsername.getText().toString().trim());
         editor.putString("password", etPassword.getText().toString().trim());
+        editor.putBoolean("keep_screen_on", cbKeepScreenOn.isChecked());
         editor.apply();
     }
 
@@ -94,6 +102,20 @@ public class MainActivity extends AppCompatActivity {
         btnStart.setOnClickListener(v -> startMQTTService());
         btnStop.setOnClickListener(v -> stopMQTTService());
         btnTestConnection.setOnClickListener(v -> testConnection());
+
+        cbKeepScreenOn.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            updateScreenOnFlag(isChecked);
+            // Save immediately on change
+            sharedPreferences.edit().putBoolean("keep_screen_on", isChecked).apply();
+        });
+    }
+
+    private void updateScreenOnFlag(boolean keepOn) {
+        if (keepOn) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        } else {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
     }
 
     private void setupReceiver() {

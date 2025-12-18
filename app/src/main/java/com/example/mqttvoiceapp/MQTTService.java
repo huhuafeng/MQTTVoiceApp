@@ -232,7 +232,7 @@ public class MQTTService extends Service {
                 }
             });
 
-        } catch (MqttException e) {
+        } catch (Exception e) {
             Log.e(TAG, "MQTT连接时发生初始异常", e);
             broadcastStatus("MQTT连接异常: " + e.getMessage());
             scheduleReconnect();
