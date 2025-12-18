@@ -12,6 +12,7 @@ import android.os.IBinder;
 import android.speech.tts.TextToSpeech;
 import android.util.Log;
 import androidx.core.app.NotificationCompat;
+import org.eclipse.paho.android.service.MqttAndroidClient;
 import org.eclipse.paho.client.mqttv3.*;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import org.json.JSONException;
@@ -36,7 +37,7 @@ public class MQTTService extends Service {
     private static final int NOTIFICATION_ID = 1;
     private static final String CHANNEL_ID = "MQTT_CHANNEL";
 
-    private MqttClient mqttClient;
+    private MqttAndroidClient mqttClient;
     private TextToSpeech textToSpeech;
     private ScheduledExecutorService scheduler;
     private String brokerIp, brokerPort, protocol, topic, clientId, username, password;
@@ -123,19 +124,19 @@ public class MQTTService extends Service {
         // Disconnect any existing client before creating a new one
         disconnectMQTT();
 
-        try {
-            String brokerUrl = protocol + brokerIp + ":" + brokerPort;
-            Log.d(TAG, "连接MQTT服务器: " + brokerUrl);
-            broadcastStatus("正在连接: " + brokerUrl);
-            updateNotification("正在连接: " + brokerUrl);
+        String brokerUrl = protocol + brokerIp + ":" + brokerPort;
+        Log.d(TAG, "连接MQTT服务器: " + brokerUrl);
+        broadcastStatus("正在连接: " + brokerUrl);
+        updateNotification("正在连接: " + brokerUrl);
 
-            mqttClient = new MqttClient(brokerUrl, clientId, new MemoryPersistence());
-            
+        try {
+            mqttClient = new MqttAndroidClient(this.getApplicationContext(), brokerUrl, clientId, new MemoryPersistence());
+
             MqttConnectOptions options = new MqttConnectOptions();
             options.setCleanSession(true);
             options.setKeepAliveInterval(60);
             options.setConnectionTimeout(30);
-            options.setAutomaticReconnect(true);
+            options.setAutomaticReconnect(true); // Paho a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a-library provides automatic reconnect options, which is great.
 
             if (username != null && !username.isEmpty()) {
                 options.setUserName(username);
@@ -167,9 +168,11 @@ public class MQTTService extends Service {
 
                 @Override
                 public void connectionLost(Throwable cause) {
-                    Log.w(TAG, "连接断开", cause);
+                    String causeMessage = (cause != null) ? cause.getMessage() : "未知原因";
+                    Log.w(TAG, "连接断开: " + causeMessage, cause);
                     broadcastStatus("连接已断开");
                     updateNotification("连接已断开");
+                    // Automatic reconnect is handled by the Paho library options
                 }
 
                 @Override
@@ -212,11 +215,26 @@ public class MQTTService extends Service {
                 }
             });
 
-            mqttClient.connect(options);
+            mqttClient.connect(options, null, new IMqttActionListener() {
+                @Override
+                public void onSuccess(IMqttToken asyncActionToken) {
+                    Log.d(TAG, "MQTT连接请求成功，等待 connectComplete 回调");
+                    // The actual success logic (like subscribing) is in connectComplete
+                }
 
-        } catch (Exception e) {
-            Log.e(TAG, "MQTT连接失败", e);
-            broadcastStatus("MQTT连接失败: " + e.getMessage());
+                @Override
+                public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
+                    Log.e(TAG, "MQTT连接失败", exception);
+                    broadcastStatus("MQTT连接失败: " + exception.getMessage());
+                    // Since automatic reconnect is enabled, Paho will handle retries.
+                    // We can also use our own scheduler as a fallback.
+                    scheduleReconnect();
+                }
+            });
+
+        } catch (MqttException e) {
+            Log.e(TAG, "MQTT连接时发生初始异常", e);
+            broadcastStatus("MQTT连接异常: " + e.getMessage());
             scheduleReconnect();
         }
     }
