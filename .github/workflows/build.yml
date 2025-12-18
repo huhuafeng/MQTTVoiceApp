@@ -5,6 +5,26 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:  # 添加手动触发配置
+    inputs:
+      build_type:
+        description: 'Build Type (debug/release)'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+      upload_artifact:
+        description: 'Upload Artifact'
+        required: true
+        default: true
+        type: boolean
+      clean_build:
+        description: 'Clean Build (clear cache)'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   build:
